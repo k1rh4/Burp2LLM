@@ -1,12 +1,11 @@
 from burp import IBurpExtender, IHttpListener
 import json
 import threading
+import httplib
 
-try:
-    from java.net import URL, HttpURLConnection
-    from java.io import BufferedReader, InputStreamReader, DataOutputStream
-except:
-    pass
+
+FORWARD_HOST = "127.0.0.1"
+FORWARD_PORT = 8888
 
 
 class BurpExtender(IBurpExtender, IHttpListener):
@@ -16,12 +15,13 @@ class BurpExtender(IBurpExtender, IHttpListener):
         self._helpers = callbacks.getHelpers()
         self._cache = set()
         self._lock = threading.Lock()
+        self._send_lock = threading.Lock()
 
         callbacks.setExtensionName("Request/Response Forwarder")
         callbacks.registerHttpListener(self)
 
         print("[*] Request/Response Forwarder loaded")
-        print("[*] Forwarding to 127.0.0.1:8888")
+        print("[*] Forwarding to {}:{}".format(FORWARD_HOST, FORWARD_PORT))
 
     def _get_cache_key(self, method, path):
         return "{}:{}".format(method, path)
@@ -35,24 +35,26 @@ class BurpExtender(IBurpExtender, IHttpListener):
             self._cache.add(key)
 
     def _send_to_server(self, data):
-        try:
-            url = URL("http://127.0.0.1:8888/forward")
-            conn = url.openConnection()
-            conn.setRequestMethod("POST")
-            conn.setRequestProperty("Content-Type", "application/json")
-            conn.setDoOutput(True)
+        with self._send_lock:
+            try:
+                body_str = json.dumps(data)
 
-            body = json.dumps(data)
-            out = DataOutputStream(conn.getOutputStream())
-            out.writeBytes(body)
-            out.flush()
-            out.close()
+                conn = httplib.HTTPConnection(FORWARD_HOST, FORWARD_PORT, timeout=10)
+                conn.request(
+                    "POST",
+                    "/forward",
+                    body_str,
+                    {"Content-Type": "application/json"}
+                )
+                resp = conn.getresponse()
+                code = resp.status
+                resp.read()
+                conn.close()
 
-            code = conn.getResponseCode()
-            conn.disconnect()
-            print("[*] Forwarded -> {} {} (HTTP {})".format(data.get("method"), data.get("path"), code))
-        except Exception as e:
-            print("[!] Forward failed: {}".format(str(e)))
+                print("[*] Forwarded -> {} {} (HTTP {})".format(
+                    data.get("method"), data.get("path"), code))
+            except Exception as e:
+                print("[!] Forward failed: {}".format(str(e)))
 
     def processHttpMessage(self, toolFlag, messageIsRequest, messageInfo):
         # Process on response so we have both request and response
