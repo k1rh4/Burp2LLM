@@ -1,0 +1,28 @@
+services:
+  collect-server:
+    build: ./CollectServer
+    ports:
+      - "8888:8888"
+    volumes:
+      - packet-data:/data/packets
+    restart: unless-stopped
+
+  llm-agent:
+    build: ./LLMAgent
+    stdin_open: true
+    tty: true
+    depends_on:
+      - collect-server
+    volumes:
+      - packet-data:/data/packets:ro
+    environment:
+      - LITELLM_BASE_URL=http://host.docker.internal:4000
+      - LITELLM_API_KEY=AAAAAAAAAAAAAAAAAA
+      - LITELLM_MODEL=gpt-4o
+      - PACKET_DIR=/data/packets
+      - MAX_PACKETS_PER_CHUNK=${MAX_PACKETS_PER_CHUNK:-20}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+volumes:
+  packet-data:

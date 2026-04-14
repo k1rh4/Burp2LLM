@@ -1,0 +1,8 @@
+services:
+  collect-server:
+    build: .
+    ports:
+      - "8888:8888"
+    volumes:
+      - ./packets:/data/packets
+    restart: unless-stopped

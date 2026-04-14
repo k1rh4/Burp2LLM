@@ -1,0 +1,15 @@
+services:
+  llm-agent:
+    build: .
+    stdin_open: true
+    tty: true
+    volumes:
+      - ../CollectServer/packets:/data/packets
+    environment:
+      - LITELLM_BASE_URL=${LITELLM_BASE_URL:-http://host.docker.internal:4000}
+      - LITELLM_API_KEY=${LITELLM_API_KEY:-sk-1234}
+      - LITELLM_MODEL=${LITELLM_MODEL:-gpt-4o}
+      - PACKET_DIR=/data/packets
+      - MAX_PACKETS_PER_CHUNK=${MAX_PACKETS_PER_CHUNK:-20}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
