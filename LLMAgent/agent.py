@@ -140,6 +140,17 @@ def _sanitize_multipart(body):
     return "".join(result)
 
 
+def _clean_surrogates(obj):
+    """Recursively remove surrogate characters from strings."""
+    if isinstance(obj, str):
+        return obj.encode("utf-8", errors="replace").decode("utf-8")
+    elif isinstance(obj, dict):
+        return {k: _clean_surrogates(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [_clean_surrogates(item) for item in obj]
+    return obj
+
+
 def load_packets(packet_dir):
     """Load all packet JSON files sorted by sequence number."""
     pattern = os.path.join(packet_dir, "*.json")
@@ -148,8 +159,9 @@ def load_packets(packet_dir):
     packets = []
     for filepath in files:
         try:
-            with open(filepath, "r", encoding="utf-8") as f:
+            with open(filepath, "r", encoding="utf-8", errors="replace") as f:
                 data = json.load(f)
+                data = _clean_surrogates(data)
                 data["_filename"] = os.path.basename(filepath)
                 packets.append(data)
         except Exception as e:
@@ -239,14 +251,13 @@ def build_messages(packets, conversation, chunk_start, chunk_end):
     chunk = packets[chunk_start:chunk_end]
     context = format_packets_for_context(chunk)
 
+    system_content = SYSTEM_PROMPT + "\n\n" + \
+        "The following HTTP packets (#{} ~ #{}) are loaded as context:\n\n{}".format(
+            chunk_start + 1, chunk_end, context
+        )
+
     messages = [
-        {"role": "system", "content": SYSTEM_PROMPT},
-        {
-            "role": "system",
-            "content": "The following HTTP packets (#{} ~ #{}) are loaded as context:\n\n{}".format(
-                chunk_start + 1, chunk_end, context
-            ),
-        },
+        {"role": "system", "content": system_content},
     ]
     messages.extend(conversation)
     return messages
